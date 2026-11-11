@@ -5,7 +5,8 @@
 --
 -- Single player and multiplayer use the same path. ISAddItemInRecipe:perform runs on the client in
 -- both; complete() (the actual change) runs right after it in single player and on the server in
--- multiplayer, whose result reaches the client some ticks later. So after each perform we watch the
+-- multiplayer, whose result reaches the client around the same time, often before perform. So the
+-- state is taken in start (before the server has the action), and after perform we watch the
 -- inventory until the change is there (bowl replaced by a salad, ingredient used up or reduced) and
 -- only then record it or queue the next ingredient.
 
@@ -391,7 +392,9 @@ end
 
 ------------------------------------------------------------------ hook
 
--- state before the add, taken on the client in perform (before complete in single player)
+-- state before the add, taken on the client in start: in multiplayer the server's change (bowl
+-- replaced by the salad, new hunger and uses) usually reaches the client before perform, so a
+-- snapshot taken in perform would already contain it and the add would never be seen
 local function watchFor(action)
 	local base, used, recipe = action.baseItem, action.usedItem, action.recipe
 	local container = action.character:getInventory()
@@ -410,15 +413,25 @@ end
 -- the true original is kept in M.originalPerform, so running this file again (Lua reload) replaces
 -- our wrapper instead of wrapping it twice
 function M.install()
-	if not ISAddItemInRecipe or not ISAddItemInRecipe.perform then
-		log("ISAddItemInRecipe:perform not found, not installed")
+	if not ISAddItemInRecipe or not ISAddItemInRecipe.perform or not ISAddItemInRecipe.start then
+		log("ISAddItemInRecipe:perform/start not found, not installed")
 		return false
+	end
+	local originalStart = M.originalStart or ISAddItemInRecipe.start
+	M.originalStart = originalStart
+	ISAddItemInRecipe.start = function(self, ...)
+		local r = originalStart(self, ...) -- in multiplayer this re-reads baseItem from the inventory
+		local ok, w = pcall(watchFor, self)
+		if not ok then log("watch setup error", w); w = nil end
+		self.repeatLastDishWatch = w
+		return r
 	end
 	local original = M.originalPerform or ISAddItemInRecipe.perform
 	M.originalPerform = original
 	ISAddItemInRecipe.perform = function(self, ...)
-		local ok, w = pcall(watchFor, self)
-		if not ok then log("watch setup error", w); w = nil end
+		local w = self.repeatLastDishWatch
+		self.repeatLastDishWatch = nil
+		if w then w.at = now() end
 		if self.repeatLastDishTask then self.repeatLastDishTask.expectAdd = false end
 		local r = original(self, ...)
 		if w then M.watches[#M.watches + 1] = w end

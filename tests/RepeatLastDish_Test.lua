@@ -327,7 +327,59 @@ local function cancel()
 	check(#salads() == 2, "new run after cancel makes two", #salads())
 end
 
+-- multiplayer order: the server's change (bowl -> salad, stats) reaches the client before perform.
+-- Simulated by running complete() ahead of every perform (outside our wrapper) and making the later
+-- complete() a no-op. 0.1.0 took its snapshot in perform and never recorded anything this way.
+local function mpOrder()
+	clearAll()
+	p():getModData().RepeatLastDish = nil
+	local ours = ISAddItemInRecipe.perform
+	T.mpOurs = ours -- finish() puts it back if this scenario dies halfway
+	ISAddItemInRecipe.perform = function(self, ...)
+		self:complete()
+		self.complete = function() return true end
+		return ours(self, ...)
+	end
+	local ok, err = pcall(function()
+		local bowl = inv():AddItem("Base.Bowl")
+		add(inv(), LETTUCE); add(inv(), TOMATO); add(inv(), CUCUMBER)
+		local recipe = saladRecipe(bowl)
+		if not check(recipe ~= nil, "salad recipe for bowl") then return end
+		T.mpRecipe, T.mpBase = recipe, bowl
+	end)
+	if not ok then check(false, "mp setup error", err) end
+	local base = T.mpBase
+	for _, ft in ipairs({ LETTUCE, TOMATO, CUCUMBER }) do
+		if not base then break end
+		local item = inv():getFirstTypeRecurse(ft:sub(6))
+		ISInventoryPaneContextMenu.onAddItemInEvoRecipe(T.mpRecipe, base, item, 0)
+		waitRunEnd(1200, "mp hand add " .. ft)
+		base = salads()[1]
+		check(base ~= nil, "mp salad after " .. ft)
+	end
+	local last = M().getLast(p())
+	check(last ~= nil and table.concat(last.items, ",") == "Base.Lettuce,Base.Tomato,Base.Cucumber",
+		"mp: hand-made salad recorded", last and table.concat(last.items, ","))
+	-- repeat two under the same order
+	clearAll()
+	local bowls = add(inv(), "Base.Bowl", 2)
+	add(T.fridge, LETTUCE, 2); add(T.fridge, TOMATO, 2); add(T.fridge, CUCUMBER, 2)
+	loot()
+	local t0 = getTimestampMs()
+	M().start(p(), bowls)
+	waitRunEnd(6000, "mp repeat two")
+	local s = salads()
+	check(#s == 2, "mp: two salads made", #s)
+	for i, sal in ipairs(s) do
+		check(extraList(sal) == "Base.Lettuce,Base.Tomato,Base.Cucumber", "mp salad " .. i .. " ingredients in order", extraList(sal))
+	end
+	log("mp repeat two took ms", getTimestampMs() - t0)
+	ISAddItemInRecipe.perform = ours
+	T.mpOurs = nil
+end
+
 local function finish()
+	if T.mpOurs then ISAddItemInRecipe.perform = T.mpOurs; T.mpOurs = nil end
 	clearAll()
 	if T.fridgeObj then pcall(function() T.fridgeObj:getSquare():RemoveTileObject(T.fridgeObj) end) end
 	p():setGodMod(false)
@@ -338,7 +390,7 @@ end
 ------------------------------------------------------------------ driver
 local SCENARIOS = {
 	{ "setup", setup }, { "record", record }, { "repeatTwo", repeatTwo }, { "missing", missing },
-	{ "partial", partial }, { "otherBase", otherBase }, { "cancel", cancel }, { "end", finish },
+	{ "partial", partial }, { "otherBase", otherBase }, { "cancel", cancel }, { "mpOrder", mpOrder }, { "end", finish },
 }
 
 -- The driver is one top-level OnTick handler (a Lua reload replaces top-level handlers; one added

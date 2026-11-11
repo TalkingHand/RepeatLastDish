@@ -1,9 +1,10 @@
 # RepeatLastDish: vanilla dependencies (format: _guide/README.md §9)
-# checked: 42.22.2 (single player pzt 2026-11-11, 42 PASS; multiplayer not tested)
+# checked: 42.22.2 (single player pzt 2026-11-11, 50 PASS incl. simulated MP order; real multiplayer not tested)
 #
 # kind	target	note
 
-lua-wrap	ISAddItemInRecipe.perform	shared/TimedActions/ISAddItemInRecipe.lua:53. Wrapped at client file load (shared loads first); original always called. Snapshot before, then OnTick watches the inventory until the add shows (record / next step)
+lua-wrap	ISAddItemInRecipe.start	shared/TimedActions/ISAddItemInRecipe.lua:34. Wrapped at client file load; original first (MP: re-reads baseItem by ID), then the snapshot (dish/used item state, result IDs in the inventory)
+lua-wrap	ISAddItemInRecipe.perform	shared/TimedActions/ISAddItemInRecipe.lua:53. Wrapped at client file load (shared loads first); original always called. Takes the start snapshot, then OnTick watches the inventory until the add shows (record / next step)
 lua-file	shared/TimedActions/ISAddItemInRecipe.lua	class wrapped; ISAddItemInRecipe:new(character, recipe, baseItem, usedItem) :177
 lua-field	ISAddItemInRecipe.recipe / .baseItem / .usedItem / .character	read in perform
 lua-call	ISInventoryPaneContextMenu.getContainers(player)	client/ISUI/ISInventoryPaneContextMenu.lua:2425 (inventory + loot pane containers, i.e. the fridge next to you)
@@ -19,7 +20,8 @@ java-call	Food:isRotten / isFrozen / getHungChange / getExtraItems / getSpices, 
 lua-call	getFileReader / getFileWriter, getServerIP / getServerPort / getServerName	MP record file
 event	Events.OnFillInventoryObjectContextMenu	option on the base item
 event	Events.OnTick	watch an add until it shows on the client
-assume	perform() runs on the client in single player and multiplayer; complete() follows it in the same frame (SP, ActionAudit notes server/ActionAudit.lua:265) or runs on the server (MP)	we never rely on complete(): we watch the client inventory
+assume	start() and perform() run on the client in single player and multiplayer (LuaTimedActionNew 42.22.2); complete() follows perform in the same frame (SP) or runs on the server (MP)	we never rely on complete(): we watch the client inventory
+assume	MP: the server's ReplaceInventoryItemInContainer (bowl -> salad) and item stats usually reach the client BEFORE perform (perform comes when ActionManager reports done)	snapshot in start, not perform; a perform snapshot already held the salad and nothing was ever recorded (0.1.0 bug, 11-11)
 assume	the first add replaces the base with a new item of the recipe's result type in the same container (bowl -> salad); later adds change that item in place	first add waits for that new item (15 s, then stops); later adds wait for a change of the dish (extra items/spices, hunger, name) or of the used item (container, hunger, uses) (3 s, then go on)
 assume	MP: ISAddItemInRecipe:complete sends sendItemStats for dish and used item; ItemStatsPacket carries hunger, uses, cooked, name but not extraItems/spices (jar 42.22.2)	not tested in MP; if nothing visible changes each step waits 3 s
 assume	MP: client player mod data is not what the server saves	record kept in Zomboid/Lua/RepeatLastDish_<ip>_<port>_<server>_<user>.txt (getServerIP/getServerPort/getServerName)
