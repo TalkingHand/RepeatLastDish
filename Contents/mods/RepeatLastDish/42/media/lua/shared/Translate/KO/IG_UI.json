@@ -1,0 +1,10 @@
+{
+	"IGUI_RepeatLastDish_Option": "마지막 요리 반복: %1",
+	"IGUI_RepeatLastDish_OptionCount": "마지막 요리 반복: %1 (x%2)",
+	"IGUI_RepeatLastDish_Ingredients": "넣을 재료(순서대로): %1",
+	"IGUI_RepeatLastDish_Missing": "재료 부족: %1",
+	"IGUI_RepeatLastDish_Skipped": "찾지 못해 건너뜀: %1",
+	"IGUI_RepeatLastDish_Done": "만든 요리: %1개",
+	"IGUI_RepeatLastDish_NoRecipe": "마지막 요리의 레시피로 만들 수 없음",
+	"IGUI_RepeatLastDish_Stopped": "마지막 요리 반복 중단"
+}

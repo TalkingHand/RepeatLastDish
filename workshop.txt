@@ -1,0 +1,25 @@
+version=1
+id=3837665530
+title=[42.22.2] Repeat Last Dish
+description=[h1]Repeat Last Dish[/h1]
+description=Remembers the ingredients you put into your last dish, in order, and makes it again from a right-click on an empty bowl or pan.
+description=
+description=[list]
+description=[*]Make a salad, stir fry, soup... the usual way. The base item and every ingredient, in order, are recorded.
+description=[*]Right-click an empty base of the same kind: [b]Repeat last dish[/b]. Select several to make several dishes in a row.
+description=[*]Ingredients come from your inventory and the containers next to you (fridge, counters, floor). Fresh or stale doesn't matter, older first. [b]Rotten food is never used.[/b]
+description=[*]Normal add-ingredient actions and times; leftovers go back where they came from.
+description=[*]Greyed out with a list of what's missing when an ingredient isn't there.
+description=[/list]
+description=
+description=[h2]Compatibility[/h2]
+description=Client-side Lua using vanilla actions only. Tested in single player; multiplayer is supported by design but not tested yet. Safe to add to or remove from a save.
+description=
+description=[h2]한국어[/h2]
+description=마지막으로 만든 요리(샐러드, 볶음 등)의 재료를 넣은 순서대로 기억했다가, 같은 빈 그릇·프라이팬을 우클릭하면 [b]마지막 요리 반복[/b]으로 다시 만듭니다. 여러 개를 선택하면 차례로 만듭니다. 재료는 인벤토리와 주변 용기(냉장고 등)에서 꺼내며, 신선도는 상관없이(오래된 것부터) 쓰고 상한 음식은 쓰지 않습니다. 싱글에서 테스트했고, 멀티도 지원하도록 만들었지만 아직 확인하지 않았습니다.
+description=
+description=Source: https://github.com/TalkingHand/RepeatLastDish
+description=
+description=[url=https://ko-fi.com/talkinghands2285][img]https://raw.githubusercontent.com/TalkingHand/RepeatLastDish/main/art/kofi_button.png[/img][/url]
+tags=Build 42;Food;Interface
+visibility=public

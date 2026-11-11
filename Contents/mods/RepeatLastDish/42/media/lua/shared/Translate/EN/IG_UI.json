@@ -1,0 +1,10 @@
+{
+	"IGUI_RepeatLastDish_Option": "Repeat last dish: %1",
+	"IGUI_RepeatLastDish_OptionCount": "Repeat last dish: %1 (x%2)",
+	"IGUI_RepeatLastDish_Ingredients": "Ingredients in order: %1",
+	"IGUI_RepeatLastDish_Missing": "Missing ingredients: %1",
+	"IGUI_RepeatLastDish_Skipped": "Not found, skipped: %1",
+	"IGUI_RepeatLastDish_Done": "Dishes made: %1",
+	"IGUI_RepeatLastDish_NoRecipe": "This can't be made with the last dish's recipe",
+	"IGUI_RepeatLastDish_Stopped": "Repeat last dish stopped"
+}

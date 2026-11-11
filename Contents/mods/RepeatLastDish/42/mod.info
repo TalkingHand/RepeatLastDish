@@ -1,0 +1,8 @@
+name=Repeat Last Dish
+id=RepeatLastDish
+description=Right-click an empty bowl or pan to make your last dish again: the same ingredients, in the same order, taken from your inventory and nearby containers like the fridge.
+poster=poster.png
+author=TalkingHand
+url=https://github.com/TalkingHand/RepeatLastDish
+modversion=0.1.0
+versionMin=42.0

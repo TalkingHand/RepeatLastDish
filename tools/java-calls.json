@@ -1,0 +1,8 @@
+{
+  "EvolvedRecipe": ["getName", "getUntranslatedName", "getItemsCanBeUse", "isResultItem", "isAllowFrozenItem", "needToBeCooked", "getFullResultItem", "getResultItem"],
+  "RecipeManager": ["getEvolvedRecipe"],
+  "InventoryItem": ["getFullType", "getType", "getID", "getContainer", "getAge", "getCurrentUsesFloat"],
+  "Food": ["isRotten", "isFrozen", "getHungChange", "getExtraItems", "getSpices", "setChef"],
+  "ItemContainer": ["contains", "containsID", "getItems"],
+  "IsoPlayer": ["getUsername"]
+}

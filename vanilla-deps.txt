@@ -1,0 +1,27 @@
+# RepeatLastDish: vanilla dependencies (format: _guide/README.md §9)
+# checked: 42.22.2 (single player pzt 2026-11-11, 42 PASS; multiplayer not tested)
+#
+# kind	target	note
+
+lua-wrap	ISAddItemInRecipe.perform	shared/TimedActions/ISAddItemInRecipe.lua:53. Wrapped at client file load (shared loads first); original always called. Snapshot before, then OnTick watches the inventory until the add shows (record / next step)
+lua-file	shared/TimedActions/ISAddItemInRecipe.lua	class wrapped; ISAddItemInRecipe:new(character, recipe, baseItem, usedItem) :177
+lua-field	ISAddItemInRecipe.recipe / .baseItem / .usedItem / .character	read in perform
+lua-call	ISInventoryPaneContextMenu.getContainers(player)	client/ISUI/ISInventoryPaneContextMenu.lua:2425 (inventory + loot pane containers, i.e. the fridge next to you)
+lua-call	ISInventoryPaneContextMenu.addToolTip()	client/ISUI/ISInventoryPaneContextMenu.lua
+lua-call	ISInventoryTransferUtil.newInventoryTransferAction(p, item, src, dst, nil)	same call as onAddItemInEvoRecipe :2372
+lua-call	ISCraftingUI.ReturnItemsToOriginalContainer(p, items)	client/ISUI/ISCraftingUI.lua:3 (leftovers back to the fridge; Disorganized keeps them)
+lua-call	ISTimedActionQueue.add / getTimedActionQueue(p).queue	client/TimedActions/ISTimedActionQueue.lua (next ingredient chosen only when the queue is empty: leftovers still being returned)
+lua-call	HaloTextHelper.addGoodText / addBadText	
+lua-call	getItemNameFromFullType, getText("ContextMenu_EvolvedRecipe_<untranslated name>")	dish name as the vanilla menu shows it
+java-call	RecipeManager.getEvolvedRecipe(item, chr, containers, false)	recipes that take a base
+java-call	EvolvedRecipe:getName / getUntranslatedName / getItemsCanBeUse / isResultItem / isAllowFrozenItem / needToBeCooked / getFullResultItem / getResultItem	tools/java-calls.json
+java-call	Food:isRotten / isFrozen / getHungChange / getExtraItems / getSpices, InventoryItem:getAge / getFullType / getID / getContainer / getCurrentUsesFloat, ItemContainer:contains / containsID / getItems	
+lua-call	getFileReader / getFileWriter, getServerIP / getServerPort / getServerName	MP record file
+event	Events.OnFillInventoryObjectContextMenu	option on the base item
+event	Events.OnTick	watch an add until it shows on the client
+assume	perform() runs on the client in single player and multiplayer; complete() follows it in the same frame (SP, ActionAudit notes server/ActionAudit.lua:265) or runs on the server (MP)	we never rely on complete(): we watch the client inventory
+assume	the first add replaces the base with a new item of the recipe's result type in the same container (bowl -> salad); later adds change that item in place	first add waits for that new item (15 s, then stops); later adds wait for a change of the dish (extra items/spices, hunger, name) or of the used item (container, hunger, uses) (3 s, then go on)
+assume	MP: ISAddItemInRecipe:complete sends sendItemStats for dish and used item; ItemStatsPacket carries hunger, uses, cooked, name but not extraItems/spices (jar 42.22.2)	not tested in MP; if nothing visible changes each step waits 3 s
+assume	MP: client player mod data is not what the server saves	record kept in Zomboid/Lua/RepeatLastDish_<ip>_<port>_<server>_<user>.txt (getServerIP/getServerPort/getServerName)
+assume	vanilla menu greys out frozen food unless isAllowFrozenItem, and items where needToBeCooked is false	ISInventoryPaneContextMenu.addItemInEvoRecipe :2028; we skip the same items
+assume	getItemsCanBeUse(chr, base, containers) lists every usable item in those containers, rotten ones included	we drop rotten ones ourselves
