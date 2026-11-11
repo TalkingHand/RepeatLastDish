@@ -1,5 +1,5 @@
 # RepeatLastDish: vanilla dependencies (format: _guide/README.md §9)
-# checked: 42.22.2 (single player pzt 2026-11-11, 50 PASS incl. simulated MP order; real multiplayer not tested)
+# checked: 42.22.2 (single player pzt 2026-11-11, 61 PASS incl. simulated MP order, spice, submenu; real multiplayer checked by user for 0.1.1 recording)
 #
 # kind	target	note
 
@@ -8,6 +8,7 @@ lua-wrap	ISAddItemInRecipe.perform	shared/TimedActions/ISAddItemInRecipe.lua:53.
 lua-file	shared/TimedActions/ISAddItemInRecipe.lua	class wrapped; ISAddItemInRecipe:new(character, recipe, baseItem, usedItem) :177
 lua-field	ISAddItemInRecipe.recipe / .baseItem / .usedItem / .character	read in perform
 lua-call	ISInventoryPaneContextMenu.getContainers(player)	client/ISUI/ISInventoryPaneContextMenu.lua:2425 (inventory + loot pane containers, i.e. the fridge next to you)
+lua-call	ISContextMenu:getOptionFromName / getSubMenu / addOptionOnTop	client/ISUI/ISContextMenu.lua:889,914; our option goes first in the "Make <dish>" submenu (name ContextMenu_Create_From_Ingredient with the dish name, built by doEvorecipeMenu :4206 before OnFillInventoryObjectContextMenu :935); main menu when vanilla left the submenu out
 lua-call	ISInventoryPaneContextMenu.addToolTip()	client/ISUI/ISInventoryPaneContextMenu.lua
 lua-call	ISInventoryTransferUtil.newInventoryTransferAction(p, item, src, dst, nil)	same call as onAddItemInEvoRecipe :2372
 lua-call	ISCraftingUI.ReturnItemsToOriginalContainer(p, items)	client/ISUI/ISCraftingUI.lua:3 (leftovers back to the fridge; Disorganized keeps them)
@@ -27,3 +28,4 @@ assume	MP: ISAddItemInRecipe:complete sends sendItemStats for dish and used item
 assume	MP: client player mod data is not what the server saves	record kept in Zomboid/Lua/RepeatLastDish_<ip>_<port>_<server>_<user>.txt (getServerIP/getServerPort/getServerName)
 assume	vanilla menu greys out frozen food unless isAllowFrozenItem, and items where needToBeCooked is false	ISInventoryPaneContextMenu.addItemInEvoRecipe :2028; we skip the same items
 assume	getItemsCanBeUse(chr, base, containers) lists every usable item in those containers, rotten ones included	we drop rotten ones ourselves
+assume	EvolvedRecipe.getItemsCanBeUse leaves spices out while the base is still empty (unless canAddSpicesEmpty) (checkItemCanBeUse, jar 42.22.2)	the missing check on an empty base also looks in the containers directly; 0.1.1 said "missing: garlic" with garlic in the inventory (user, 11-11)

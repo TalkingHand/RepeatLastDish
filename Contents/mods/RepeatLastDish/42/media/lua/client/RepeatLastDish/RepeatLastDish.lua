@@ -223,13 +223,36 @@ function M.findIngredient(player, recipe, base, fullType, containers, exclude)
 	return best
 end
 
+-- an item of `fullType` in the inventory or those containers, whatever the recipe takes right now.
+-- getItemsCanBeUse leaves spices (garlic, salt, ...) out while the base is still empty, though a
+-- spice that comes later in the dish is fine: by then the base is the dish
+local function present(player, recipe, fullType, containers, exclude)
+	local function look(container)
+		local list = container:getItemsFromFullType(fullType)
+		for i = 0, list:size() - 1 do
+			local item = list:get(i)
+			if usable(recipe, item, fullType, exclude) and not (instanceof(item, "Food") and item:isBurnt()) then return true end
+		end
+		return false
+	end
+	if look(player:getInventory()) then return true end
+	for i = 0, containers:size() - 1 do
+		if look(containers:get(i)) then return true end
+	end
+	return false
+end
+M.present = present
+
 -- all distinct ingredient types missing for a fresh dish on `base`
 function M.missingFor(player, recipe, base, items, containers, exclude)
 	local missing, seen = {}, {}
+	local empty = not recipe:isResultItem(base)
 	for _, fullType in ipairs(items) do
 		if not seen[fullType] then
 			seen[fullType] = true
-			if not M.findIngredient(player, recipe, base, fullType, containers, exclude) then
+			local found = M.findIngredient(player, recipe, base, fullType, containers, exclude)
+				or (empty and present(player, recipe, fullType, containers, exclude))
+			if not found then
 				missing[#missing + 1] = fullType
 			end
 		end
@@ -474,7 +497,16 @@ function M.onFillMenu(playerNum, context, items)
 	if not recipe then return end
 	local text = getText("IGUI_RepeatLastDish_Option", dishName(recipe))
 	if #bases > 1 then text = getText("IGUI_RepeatLastDish_OptionCount", dishName(recipe), #bases) end
-	local option = context:addOption(text, player, M.start, bases)
+	-- first entry of the vanilla "Make Salad" submenu when there is one (vanilla leaves it out when
+	-- nothing can go in right now), else at the end of the menu
+	local option
+	local parent = context.getOptionFromName and context:getOptionFromName(getText("ContextMenu_Create_From_Ingredient", dishName(recipe)))
+	local sub = parent and parent.subOption and context.getSubMenu and context:getSubMenu(parent.subOption)
+	if sub and sub.addOptionOnTop then
+		option = sub:addOptionOnTop(text, player, M.start, bases)
+	else
+		option = context:addOption(text, player, M.start, bases)
+	end
 	local tooltip = ISInventoryPaneContextMenu.addToolTip()
 	tooltip.description = getText("IGUI_RepeatLastDish_Ingredients", names(last.items))
 	local missing = M.missingFor(player, recipe, bases[1], last.items, containers, {})

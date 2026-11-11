@@ -4,5 +4,5 @@ description=Right-click an empty bowl or pan to make your last dish again: the s
 poster=poster.png
 author=TalkingHand
 url=https://github.com/TalkingHand/RepeatLastDish
-modversion=0.1.1
+modversion=0.1.2
 versionMin=42.0

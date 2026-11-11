@@ -327,6 +327,64 @@ local function cancel()
 	check(#salads() == 2, "new run after cancel makes two", #salads())
 end
 
+-- a spice in the record (garlic after lettuce): vanilla does not list spices for an empty bowl, so
+-- the check on the empty bowl must still find it (0.1.1 showed "missing: garlic")
+local function spice()
+	clearAll()
+	p():getModData().RepeatLastDish = nil
+	local bowl = inv():AddItem("Base.Bowl")
+	add(inv(), LETTUCE); add(inv(), "Base.Garlic")
+	local recipe = saladRecipe(bowl)
+	if not check(recipe ~= nil, "salad recipe for bowl") then return end
+	local base = bowl
+	for _, ft in ipairs({ LETTUCE, "Base.Garlic" }) do
+		local item = inv():getFirstTypeRecurse(ft:sub(6))
+		ISInventoryPaneContextMenu.onAddItemInEvoRecipe(recipe, base, item, 0)
+		waitRunEnd(1200, "spice hand add " .. ft)
+		base = salads()[1]
+		if not check(base ~= nil, "salad after " .. ft) then return end
+	end
+	local last = M().getLast(p())
+	check(last and table.concat(last.items, ",") == "Base.Lettuce,Base.Garlic", "spice recorded", last and table.concat(last.items, ","))
+	clearAll()
+	local b2 = add(T.fridge, "Base.Bowl")[1]
+	add(T.fridge, LETTUCE); add(T.fridge, "Base.Garlic")
+	loot()
+	local opt = fakeMenu({ b2 })
+	check(opt ~= nil and not opt.notAvailable, "option available with garlic in the fridge",
+		opt and opt.toolTip and opt.toolTip.description)
+	if opt then M().start(p(), opt.param1) end
+	waitRunEnd(3000, "spice repeat")
+	local s = salads()
+	check(#s == 1, "salad made", #s)
+	if s[1] then
+		local sp = s[1]:getSpices()
+		local has = false
+		if sp then for i = 0, sp:size() - 1 do if tostring(sp:get(i)):find("Garlic") then has = true end end end
+		check(has, "garlic added as spice", sp and tostring(sp))
+	end
+end
+
+-- the option is the first entry of vanilla's "Make Salad" submenu (real inventory context menu)
+local function submenu()
+	clearAll()
+	local bowl = inv():AddItem("Base.Bowl")
+	add(inv(), LETTUCE); add(inv(), "Base.Garlic")
+	local ctx = ISInventoryPaneContextMenu.createMenu(0, true, { bowl }, 100, 100)
+	if not check(ctx ~= nil, "context menu made") then return end
+	local recipe = M().findRecipe(p(), bowl, M().getLast(p()).recipe, ISInventoryPaneContextMenu.getContainers(p()))
+	local name = getText("ContextMenu_Create_From_Ingredient", getText("ContextMenu_EvolvedRecipe_" .. recipe:getUntranslatedName()))
+	local parent = ctx:getOptionFromName(name)
+	check(parent ~= nil and parent.subOption ~= nil, "vanilla make-salad submenu", name)
+	local sub = parent and parent.subOption and ctx:getSubMenu(parent.subOption)
+	local first = sub and sub.options[1]
+	check(first ~= nil and first.onSelect == M().start, "our option first in submenu", first and first.name)
+	local inMain = false
+	for _, o in ipairs(ctx.options) do if o.onSelect == M().start then inMain = true end end
+	check(not inMain, "not also in the main menu")
+	ctx:hideAndChildren()
+end
+
 -- multiplayer order: the server's change (bowl -> salad, stats) reaches the client before perform.
 -- Simulated by running complete() ahead of every perform (outside our wrapper) and making the later
 -- complete() a no-op. 0.1.0 took its snapshot in perform and never recorded anything this way.
@@ -390,7 +448,7 @@ end
 ------------------------------------------------------------------ driver
 local SCENARIOS = {
 	{ "setup", setup }, { "record", record }, { "repeatTwo", repeatTwo }, { "missing", missing },
-	{ "partial", partial }, { "otherBase", otherBase }, { "cancel", cancel }, { "mpOrder", mpOrder }, { "end", finish },
+	{ "partial", partial }, { "otherBase", otherBase }, { "cancel", cancel }, { "spice", spice }, { "submenu", submenu }, { "mpOrder", mpOrder }, { "end", finish },
 }
 
 -- The driver is one top-level OnTick handler (a Lua reload replaces top-level handlers; one added
