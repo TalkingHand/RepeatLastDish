@@ -14,7 +14,7 @@ A Project Zomboid Build 42 mod. Cooking the same salad or stir fry ten times mea
 ## Compatibility
 
 - Client-side Lua; uses only vanilla actions, so the server needs nothing beyond having the mod in its list.
-- Single player tested. Multiplayer: each step waits until the server's change shows in your inventory. 0.1.1 fixed dishes made on a server not being recorded (the state was read after the server's change had already arrived); checked on a dedicated server.
+- Checked in single player and multiplayer (dedicated server, 0.1.2). Multiplayer: each step waits until the server's change shows in your inventory. 0.1.1 fixed dishes made on a server not being recorded (the state was read after the server's change had already arrived).
 - Safe to add to or remove from an existing save. The last dish is kept in the player's mod data (single player) or in `Zomboid/Lua/RepeatLastDish_<server>_<name>.txt` on your PC (multiplayer).
 
 ## Install
