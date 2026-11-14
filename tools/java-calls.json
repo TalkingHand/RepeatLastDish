@@ -1,8 +1,10 @@
 {
-  "EvolvedRecipe": ["getName", "getUntranslatedName", "getItemsCanBeUse", "isResultItem", "isAllowFrozenItem", "needToBeCooked", "getFullResultItem", "getResultItem"],
+  "EvolvedRecipe": ["getName", "getUntranslatedName", "getItemsCanBeUse", "isResultItem", "isAllowFrozenItem", "needToBeCooked", "getFullResultItem", "getResultItem", "getMaxItems", "isCookable", "getPossibleItems"],
+  "ItemRecipe": ["getFullType", "getUse"],
   "RecipeManager": ["getEvolvedRecipe"],
-  "InventoryItem": ["getFullType", "getType", "getID", "getContainer", "getAge", "getCurrentUsesFloat"],
-  "Food": ["isRotten", "isFrozen", "getHungChange", "getExtraItems", "getSpices", "setChef"],
+  "InventoryItem": ["getFullType", "getType", "getID", "getContainer", "getAge", "getCurrentUsesFloat", "getCurrentUses", "getOffAgeMax", "isFavorite", "isSpice"],
+  "Food": ["isRotten", "isFrozen", "isBurnt", "isCooked", "isbDangerousUncooked", "getHungChange", "getExtraItems", "getSpices", "setChef"],
   "ItemContainer": ["contains", "containsID", "getItems"],
-  "IsoPlayer": ["getUsername"]
+  "IsoPlayer": ["getUsername"],
+  "IsoGameCharacter": ["getPerkLevel", "isKnownPoison", "isEquipped"]
 }

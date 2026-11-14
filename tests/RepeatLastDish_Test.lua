@@ -170,6 +170,7 @@ local function setup()
 	end
 	check(shown, "fridge shown in loot containers")
 	check(M() and M().installed, "mod installed")
+	T.cookLvl = p():getPerkLevel(Perks.Cooking)
 end
 
 -- by hand (vanilla flow): bowl + lettuce, tomato, cucumber -> recorded in that order
@@ -436,9 +437,195 @@ local function mpOrder()
 	T.mpOurs = nil
 end
 
+------------------------------------------------------------------ cook what spoils first
+
+local function setLeft(item, days) item:setAge(item:getOffAgeMax() - days) end
+
+local function setCooking(lvl)
+	pcall(function() p():setPerkLevelDebug(Perks.Cooking, lvl) end)
+	return check(p():getPerkLevel(Perks.Cooking) == lvl, "cooking level " .. lvl, p():getPerkLevel(Perks.Cooking))
+end
+
+local function short(fullTypes)
+	local t = {}
+	for i, ft in ipairs(fullTypes) do t[i] = ft:gsub("^Base%.", "") end
+	return table.concat(t, ",")
+end
+
+local function slice(t, n)
+	local out = {}
+	for i = 1, math.min(n, #t) do out[i] = t[i] end
+	return out
+end
+
+local function typeCounts(food)
+	local c = {}
+	local ex = food:getExtraItems()
+	if ex then for i = 0, ex:size() - 1 do local ft = tostring(ex:get(i)); c[ft] = (c[ft] or 0) + 1 end end
+	return c
+end
+
+local function hasSpice(food, name)
+	local sp = food:getSpices()
+	if sp then for i = 0, sp:size() - 1 do if tostring(sp:get(i)) == name then return true end end end
+	return false
+end
+
+-- the vanilla unhappiness step (EvolvedRecipe.addItem 42.22.2) as the mod computes it
+local function autoMath()
+	local f = M().unhappyStep
+	check(f({}, 0, "A", 0) == -5, "new type -5")
+	check(f({ A = 1 }, 1, "A", 0) == 0, "2nd copy 0")
+	check(f({ A = 2 }, 2, "A", 3) == 5, "3rd copy +5")
+	check(f({}, 3, "D", 0) == 0, "cooking 0: 4th ingredient 0")
+	check(f({}, 4, "E", 0) == 5, "cooking 0: 5th ingredient +5")
+	check(f({ A = 2 }, 4, "A", 1) == 0, "cooking 1: 5th ingredient as 3rd copy 0 (n-2-3*lvl = -1)")
+	-- n-2 = 3 > 2: changer += 5-2-6 = -3, so -5 + 5*(-3): vanilla rewards it more, not less
+	check(f({}, 5, "F", 2) == -20, "cooking 2: 6th ingredient -20")
+end
+
+-- the test fridge for the plan scenarios; returns named items
+local function stockFridge()
+	local f = T.fridge
+	local s = {}
+	s.lettuceA = add(f, LETTUCE)[1]; setLeft(s.lettuceA, 0.5)
+	s.lettuceB = add(f, LETTUCE)[1]; setLeft(s.lettuceB, 0.6)
+	s.tomato = add(f, TOMATO)[1]; setStale(s.tomato); setLeft(s.tomato, 1.0)
+	s.cucumber = add(f, CUCUMBER)[1]; setLeft(s.cucumber, 3)
+	s.carrots = add(f, "Base.Carrots")[1]; setLeft(s.carrots, 4)
+	s.lettuceC = add(f, LETTUCE)[1]
+	s.cabbage = add(f, "Base.Cabbage")[1]; setRotten(s.cabbage)
+	s.onion = add(f, "Base.Onion")[1]; setLeft(s.onion, 0.2); s.onion:setFavorite(true)
+	s.mushroom = add(f, "Base.MushroomGeneric1")[1]; setLeft(s.mushroom, 0.1)
+	s.basil = add(f, "Base.Basil")[1]; setLeft(s.basil, 2)
+	s.salt = add(f, "Base.Salt")[1]
+	s.pepper = add(f, "Base.Pepper")[1]
+	s.oil = add(f, "Base.OilOlive")[1]
+	s.peanuts = add(f, "Base.Peanuts")[1]
+	return s
+end
+
+-- what goes in, at cooking 0 and 3, and the real run at cooking 0
+local function autoPlan()
+	clearAll()
+	local bowl = inv():AddItem("Base.Bowl")
+	local s = stockFridge()
+	loot()
+	check(not s.tomato:isFresh() and not s.tomato:isRotten(), "tomato stale")
+	check(M().mayBePoisoned(s.mushroom), "wild mushroom counts as may be poisoned")
+	check(not M().mayBePoisoned(s.lettuceA), "lettuce does not")
+	local recipe = saladRecipe(bowl)
+	if not check(recipe ~= nil, "salad recipe") then return end
+	local containers = ISInventoryPaneContextMenu.getContainers(p())
+	local ex = { [bowl] = true }
+
+	setCooking(3)
+	local plan3 = M().planDish(p(), recipe, bowl, containers, ex)
+	log("plan cooking 3:", short(plan3))
+	-- new types first in spoil order, then a 2nd lettuce (step 0); a 3rd lettuce would be +5
+	check(short(slice(plan3, 5)) == "Lettuce,Tomato,Cucumber,Carrots,Lettuce", "cooking 3 mains", short(plan3))
+
+	if not setCooking(0) then return end
+	local plan = M().planDish(p(), recipe, bowl, containers, ex)
+	log("plan cooking 0:", short(plan))
+	check(short(slice(plan, 4)) == "Lettuce,Tomato,Cucumber,Carrots", "cooking 0 mains: 4, no 2nd copy", short(plan))
+	check(plan[5] == "Base.Basil", "perishable spice next", plan[5])
+	local keep = { ["Base.Salt"] = true, ["Base.Pepper"] = true, ["Base.OilOlive"] = true }
+	check(#plan == 7 and keep[plan[6]] and keep[plan[7]], "two lasting spices", short(plan))
+	local joined = "," .. table.concat(plan, ",") .. ","
+	check(not joined:find(",Base.Peanuts,"), "peanuts (never go off) left out")
+	check(not joined:find("Mushroom"), "mushroom left out")
+	check(not joined:find("Onion"), "favourite onion left out")
+	check(not joined:find("Cabbage"), "rotten cabbage left out")
+
+	-- the option in the real menu, then the run
+	local ctx = ISInventoryPaneContextMenu.createMenu(0, true, { bowl }, 100, 100)
+	local opt
+	local name = getText("ContextMenu_Create_From_Ingredient", getText("ContextMenu_EvolvedRecipe_" .. recipe:getUntranslatedName()))
+	local parent = ctx and ctx:getOptionFromName(name)
+	local sub = parent and parent.subOption and ctx:getSubMenu(parent.subOption)
+	if sub then for _, o in ipairs(sub.options) do if o.onSelect == M().startAuto then opt = o end end end
+	check(opt ~= nil and not opt.notAvailable, "auto option in make-salad submenu", opt and opt.name)
+	if sub and opt then check(sub.options[1].onSelect == M().start or sub.options[1] == opt, "repeat option stays first") end
+	if opt then log("auto tooltip:", opt.toolTip and opt.toolTip.description) end
+	if ctx then ctx:hideAndChildren() end
+	if not opt then return end
+	check(opt.param2 == recipe:getUntranslatedName(), "recipe passed", opt.param2)
+	M().startAuto(p(), opt.param1, opt.param2)
+	waitRunEnd(6000, "auto run")
+	local sl = salads()
+	if not check(#sl == 1, "one salad", #sl) then return end
+	local dish = sl[1]
+	check(extraList(dish) == "Base.Lettuce,Base.Tomato,Base.Cucumber,Base.Carrots", "salad mains", extraList(dish))
+	check(hasSpice(dish, "Base.Basil"), "basil in", tostring(dish:getSpices()))
+	local nSp = dish:getSpices() and dish:getSpices():size() or 0
+	check(nSp == 3, "three spices", nSp)
+	log("salad unhappy", dish:getUnhappyChange(), "boredom", dish:getBoredomChange(), "hunger", dish:getHungChange())
+	-- 3 x -5 + 0 for the mains, spices lower it further
+	check(dish:getUnhappyChange() <= -15, "salad unhappiness at most -15", dish:getUnhappyChange())
+	check(not T.fridge:contains(s.lettuceA) or s.lettuceA:getHungChange() ~= s.lettuceB:getHungChange(), "lettuce that goes off first used")
+	check(T.fridge:contains(s.mushroom), "mushroom untouched")
+	check(T.fridge:contains(s.onion), "onion untouched")
+	check(T.fridge:contains(s.cabbage), "cabbage untouched")
+	check(T.fridge:contains(s.peanuts), "peanuts untouched")
+	local last = M().getLast(p())
+	check(last and table.concat(last.items, ",") == table.concat(plan, ","), "auto dish becomes the last dish",
+		last and short(last.items))
+	check(M().task == nil, "task ended")
+	setCooking(3)
+end
+
+-- two bowls, cooking 3: each salad planned on what is left, no type a 3rd time in any salad
+local function autoTwo()
+	clearAll()
+	if not setCooking(3) then return end
+	local bowls = add(inv(), "Base.Bowl", 2)
+	for _, ft in ipairs({ LETTUCE, TOMATO, CUCUMBER }) do
+		for _, it in ipairs(add(T.fridge, ft, 3)) do setLeft(it, 1 + ZombRand(3)) end
+	end
+	loot()
+	M().startAuto(p(), bowls, T.recipeName or "Salad")
+	waitRunEnd(12000, "auto two")
+	local sl = salads()
+	check(#sl == 2, "two salads", #sl)
+	for i, sal in ipairs(sl) do
+		local worst = 0
+		for _, n in pairs(typeCounts(sal)) do worst = math.max(worst, n) end
+		check(worst <= 2, "salad " .. i .. ": no 3rd copy", extraList(sal))
+	end
+	check(countType(inv(), "Base.Bowl") == 0, "both bowls used")
+	check(M().task == nil, "task ended")
+end
+
+-- only lasting food and rotten food: option greyed out, a run makes nothing
+local function autoNone()
+	clearAll()
+	local bowl = inv():AddItem("Base.Bowl")
+	add(T.fridge, "Base.Peanuts"); add(T.fridge, "Base.Salt")
+	setRotten(add(T.fridge, LETTUCE)[1])
+	loot()
+	local recipe = saladRecipe(bowl)
+	if not check(recipe ~= nil, "salad recipe") then return end
+	local plan = M().planDish(p(), recipe, bowl, ISInventoryPaneContextMenu.getContainers(p()), { [bowl] = true })
+	check(#plan == 0, "empty plan", short(plan))
+	local ctx = ISInventoryPaneContextMenu.createMenu(0, true, { bowl }, 100, 100)
+	local name = getText("ContextMenu_Create_From_Ingredient", getText("ContextMenu_EvolvedRecipe_" .. recipe:getUntranslatedName()))
+	local parent = ctx and ctx:getOptionFromName(name)
+	local sub = parent and parent.subOption and ctx:getSubMenu(parent.subOption)
+	local opt
+	if sub then for _, o in ipairs(sub.options) do if o.onSelect == M().startAuto then opt = o end end end
+	check(opt ~= nil and opt.notAvailable == true, "option greyed out", sub and "submenu" or "no submenu")
+	if ctx then ctx:hideAndChildren() end
+	M().startAuto(p(), { bowl }, recipe:getUntranslatedName())
+	waitRunEnd(600, "auto none")
+	check(#salads() == 0, "no salad")
+	check(inv():contains(bowl), "bowl kept")
+end
+
 local function finish()
 	if T.mpOurs then ISAddItemInRecipe.perform = T.mpOurs; T.mpOurs = nil end
 	clearAll()
+	if T.cookLvl then pcall(function() p():setPerkLevelDebug(Perks.Cooking, T.cookLvl) end) end
 	if T.fridgeObj then pcall(function() T.fridgeObj:getSquare():RemoveTileObject(T.fridgeObj) end) end
 	p():setGodMod(false)
 	p():setInvisible(false)
@@ -448,7 +635,8 @@ end
 ------------------------------------------------------------------ driver
 local SCENARIOS = {
 	{ "setup", setup }, { "record", record }, { "repeatTwo", repeatTwo }, { "missing", missing },
-	{ "partial", partial }, { "otherBase", otherBase }, { "cancel", cancel }, { "spice", spice }, { "submenu", submenu }, { "mpOrder", mpOrder }, { "end", finish },
+	{ "partial", partial }, { "otherBase", otherBase }, { "cancel", cancel }, { "spice", spice }, { "submenu", submenu }, { "mpOrder", mpOrder },
+	{ "autoMath", autoMath }, { "autoPlan", autoPlan }, { "autoTwo", autoTwo }, { "autoNone", autoNone }, { "end", finish },
 }
 
 -- The driver is one top-level OnTick handler (a Lua reload replaces top-level handlers; one added

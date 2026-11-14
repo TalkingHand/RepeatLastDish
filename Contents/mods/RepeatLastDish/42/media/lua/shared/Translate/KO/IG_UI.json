@@ -6,5 +6,9 @@
 	"IGUI_RepeatLastDish_Skipped": "찾지 못해 건너뜀: %1",
 	"IGUI_RepeatLastDish_Done": "만든 요리: %1개",
 	"IGUI_RepeatLastDish_NoRecipe": "마지막 요리의 레시피로 만들 수 없음",
-	"IGUI_RepeatLastDish_Stopped": "마지막 요리 반복 중단"
+	"IGUI_RepeatLastDish_Stopped": "마지막 요리 반복 중단",
+	"IGUI_RepeatLastDish_AutoOption": "상할 재료부터 요리: %1",
+	"IGUI_RepeatLastDish_AutoOptionCount": "상할 재료부터 요리: %1 (x%2)",
+	"IGUI_RepeatLastDish_AutoIngredients": "먼저 상할 재료부터, 요리 효과가 떨어지지 않는 만큼만: %1",
+	"IGUI_RepeatLastDish_AutoNone": "이 요리에 넣을 상하는 재료가 근처에 없음"
 }

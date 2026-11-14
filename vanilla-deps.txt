@@ -1,5 +1,5 @@
 # RepeatLastDish: vanilla dependencies (format: _guide/README.md §9)
-# checked: 42.22.2 (single player pzt 2026-11-11, 61 PASS incl. simulated MP order, spice, submenu; real multiplayer checked by user for 0.1.1 recording)
+# checked: 42.22.2 (single player pzt 2026-11-14, 108 PASS + 1 test expectation fixed (0.1.3 cook what spoils first); 2026-11-11, 61 PASS incl. simulated MP order, spice, submenu; real multiplayer checked by user for 0.1.1 recording)
 #
 # kind	target	note
 
@@ -16,8 +16,8 @@ lua-call	ISTimedActionQueue.add / getTimedActionQueue(p).queue	client/TimedActio
 lua-call	HaloTextHelper.addGoodText / addBadText	
 lua-call	getItemNameFromFullType, getText("ContextMenu_EvolvedRecipe_<untranslated name>")	dish name as the vanilla menu shows it
 java-call	RecipeManager.getEvolvedRecipe(item, chr, containers, false)	recipes that take a base
-java-call	EvolvedRecipe:getName / getUntranslatedName / getItemsCanBeUse / isResultItem / isAllowFrozenItem / needToBeCooked / getFullResultItem / getResultItem	tools/java-calls.json
-java-call	Food:isRotten / isFrozen / getHungChange / getExtraItems / getSpices, InventoryItem:getAge / getFullType / getID / getContainer / getCurrentUsesFloat, ItemContainer:contains / containsID / getItems	
+java-call	EvolvedRecipe:getName / getUntranslatedName / getItemsCanBeUse / isResultItem / isAllowFrozenItem / needToBeCooked / getFullResultItem / getResultItem / getMaxItems / isCookable / getPossibleItems, ItemRecipe:getFullType / getUse	tools/java-calls.json
+java-call	Food:isRotten / isFrozen / isBurnt / isCooked / isbDangerousUncooked / getHungChange / getExtraItems / getSpices, InventoryItem:getAge / getOffAgeMax / getFullType / getID / getContainer / getCurrentUsesFloat / getCurrentUses / isFavorite / isSpice, ItemContainer:contains / containsID / getItems, IsoGameCharacter:getPerkLevel / isKnownPoison / isEquipped	
 lua-call	getFileReader / getFileWriter, getServerIP / getServerPort / getServerName	MP record file
 event	Events.OnFillInventoryObjectContextMenu	option on the base item
 event	Events.OnTick	watch an add until it shows on the client
@@ -29,3 +29,7 @@ assume	MP: client player mod data is not what the server saves	record kept in Zo
 assume	vanilla menu greys out frozen food unless isAllowFrozenItem, and items where needToBeCooked is false	ISInventoryPaneContextMenu.addItemInEvoRecipe :2028; we skip the same items
 assume	getItemsCanBeUse(chr, base, containers) lists every usable item in those containers, rotten ones included	we drop rotten ones ourselves
 assume	EvolvedRecipe.getItemsCanBeUse leaves spices out while the base is still empty (unless canAddSpicesEmpty) (checkItemCanBeUse, jar 42.22.2)	the missing check on an empty base also looks in the containers directly; 0.1.1 said "missing: garlic" with garlic in the inventory (user, 11-11)
+lua-field	forageSystem.itemDefs[fullType].poisonChance	shared/Foraging/forageSystem.lua (doPoisonItemSpawn :2225 poisons some foraged items at random); "cook what spoils first" leaves out every type with poisonChance > 0 (wild mushrooms, berries)
+assume	EvolvedRecipe.addItem (jar 42.22.2): each non-spice add sets the dish's unhappiness to current - 5 + 5*changer, changer = copies of that fullType already in extraItems, + (n-2-3*cooking) when n-2 > cooking (n = extraItems before the add); spices go to spices, not extraItems, once per type, each -use/100*200 unhappiness and boredom	M.unhappyStep copies it; "cook what spoils first" only takes adds with a step <= 0. Re-check this after every game update
+assume	the dish's freshness comes from the base only (addItem copies age from the old base); stale ingredients give less hunger (Food.getHungerChange /1.3) but no unhappiness to the dish	why food that is about to go off is used first without a penalty
+assume	Food.canAge(): offAgeMax == 1000000000 means the food never goes off	perishable() in "cook what spoils first"

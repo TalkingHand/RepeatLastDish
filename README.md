@@ -11,10 +11,20 @@ A Project Zomboid Build 42 mod. Cooking the same salad or stir fry ten times mea
 - The option is greyed out, with the missing ingredients in the tooltip, when something is not there. With several bases, it stops before a dish it can't finish. An ingredient that runs out halfway through a dish is skipped and reported.
 - Cancel at any time like any other action.
 
+## Cook what spoils first (0.1.3)
+
+Right below the repeat option: **Cook what spoils first: Salad**. You choose the dish; the mod chooses the food that goes off soonest, and the tooltip lists it before you click.
+
+- It follows the game's own rule (`EvolvedRecipe.addItem`): each ingredient sets the dish's unhappiness to `current - 5 + 5 * changer`, where `changer` is the number of the same ingredient already in it, plus `n - 2 - 3 * Cooking` once `n - 2 > Cooking` (`n` = ingredients already in). So a new ingredient gives -5, a 2nd of the same 0, a 3rd +5, and at Cooking 0 the 4th ingredient gives 0 and the 5th +5. Only adds of 0 or less go in, new ingredients first.
+- Stale food has no penalty in a dish (its freshness comes from the bowl), so the food closest to rotting goes first.
+- Then spices (they are not counted in that rule, and each lowers unhappiness and boredom): every spice that goes off, plus the 2 most plentiful that keep.
+- Never used: rotten or burnt food, favourites, what you hold, food you know is poisoned, raw food that must be cooked for a dish that is never cooked, and wild mushrooms and berries (foraging poisons some at random and you can't tell which, so the whole kind is left out).
+- With several bases, each dish is planned on what is left. The first dish becomes your last dish.
+
 ## Compatibility
 
 - Client-side Lua; uses only vanilla actions, so the server needs nothing beyond having the mod in its list.
-- Checked in single player and multiplayer (dedicated server, 0.1.2). Multiplayer: each step waits until the server's change shows in your inventory. 0.1.1 fixed dishes made on a server not being recorded (the state was read after the server's change had already arrived).
+- Checked in single player and multiplayer (dedicated server, 0.1.2). "Cook what spoils first" is checked in single player only. Multiplayer: each step waits until the server's change shows in your inventory. 0.1.1 fixed dishes made on a server not being recorded (the state was read after the server's change had already arrived).
 - Safe to add to or remove from an existing save. The last dish is kept in the player's mod data (single player) or in `Zomboid/Lua/RepeatLastDish_<server>_<name>.txt` on your PC (multiplayer).
 
 ## Install
@@ -23,7 +33,7 @@ A Project Zomboid Build 42 mod. Cooking the same salad or stir fry ten times mea
 
 ## Testing
 
-`pzt live` in this folder (PZTestHarness). Scenarios: recording a hand-made salad, repeating two salads from a fridge with a rotten and a stale ingredient, missing ingredient, partial run, other base items, cancel, a spice (garlic) in the dish, the submenu position, and the multiplayer order (server change before perform).
+`pzt live` in this folder (PZTestHarness). Scenarios: recording a hand-made salad, repeating two salads from a fridge with a rotten and a stale ingredient, missing ingredient, partial run, other base items, cancel, a spice (garlic) in the dish, the submenu position, the multiplayer order (server change before perform), and cook what spoils first (the rule's numbers, the plan at Cooking 0 and 3, two bowls, nothing to use).
 
 ## Support
 

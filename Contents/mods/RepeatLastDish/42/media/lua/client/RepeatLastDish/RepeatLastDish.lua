@@ -205,15 +205,17 @@ local function usable(recipe, item, fullType, exclude)
 	return true
 end
 
--- best item of `fullType` the recipe accepts for `base`: player inventory first, then the oldest
-function M.findIngredient(player, recipe, base, fullType, containers, exclude)
+-- best item of `fullType` the recipe accepts for `base`: player inventory first, then the oldest.
+-- `auto` (cook what spoils first): the oldest wherever it is, and the extra checks of M.autoUsable
+function M.findIngredient(player, recipe, base, fullType, containers, exclude, auto)
 	local list = recipe:getItemsCanBeUse(player, base, containers)
 	local inv = player:getInventory()
 	local best, bestInInv, bestAge
 	for i = 0, list:size() - 1 do
 		local item = list:get(i)
-		if item ~= base and usable(recipe, item, fullType, exclude) then
-			local inInv = inv:contains(item)
+		if item ~= base and usable(recipe, item, fullType, exclude)
+			and (not auto or M.autoUsable(player, recipe, item, exclude)) then
+			local inInv = (not auto) and inv:contains(item)
 			local age = item:getAge() or 0
 			if not best or (inInv and not bestInInv) or (inInv == bestInInv and age > bestAge) then
 				best, bestInInv, bestAge = item, inInv, age
@@ -242,6 +244,156 @@ local function present(player, recipe, fullType, containers, exclude)
 	return false
 end
 M.present = present
+
+------------------------------------------------------------------ cook what spoils first
+-- A dish from an empty base out of the food that goes off soonest. Only adds that do not lower the
+-- dish: vanilla EvolvedRecipe.addItem (42.22.2) sets the dish's unhappiness on every non-spice add to
+-- current - 5 + 5 * changer, changer = copies of that type already in it, plus (n - 2 - 3 * cooking)
+-- when n - 2 > cooking (n = ingredients already in it). So a new type gives -5, a 2nd copy 0, a 3rd
+-- +5, and at cooking 0 the 4th ingredient onward stops helping. We only take adds with a step <= 0.
+-- Spices are not counted there and each type goes in once; each lowers unhappiness and boredom.
+
+local NEVER_ROTS = 1000000000 -- Food.canAge(): offAgeMax of food that does not go off
+local SPICE_KEEP = 2          -- spices that do not go off: at most this many types, the most plentiful
+
+local function perishable(item)
+	return instanceof(item, "Food") and item:getOffAgeMax() < NEVER_ROTS
+end
+
+-- days until rotten; food that never rots last
+local function timeLeft(item)
+	if not perishable(item) then return NEVER_ROTS end
+	return item:getOffAgeMax() - (item:getAge() or 0)
+end
+
+-- unhappiness change of adding one non-spice `fullType` (vanilla formula above)
+local function unhappyStep(counts, n, fullType, cooking)
+	local changer = counts[fullType] or 0
+	if n - 2 > cooking then changer = changer + (n - 2 - cooking * 3) end
+	return -5 + 5 * changer
+end
+M.unhappyStep = unhappyStep
+
+-- wild mushrooms and berries: foraging poisons some of them at random (forageSystem.doPoisonItemSpawn,
+-- poisonChance in the forage definition) and the player cannot tell which. The whole type is left
+-- out, so the choice gives nothing away about a single item.
+local function mayBePoisoned(item)
+	local defs = forageSystem and forageSystem.itemDefs
+	local def = defs and defs[item:getFullType()]
+	return def ~= nil and (tonumber(def.poisonChance) or 0) > 0
+end
+M.mayBePoisoned = mayBePoisoned
+
+-- also left out: rotten, burnt, frozen when the recipe does not take it, not cooked when it must be,
+-- raw meat and the like in a dish that is never cooked (vanilla lets it in and the dish turns
+-- dangerous), food the player knows is poisoned or that may be, favourites, what the player holds
+function M.autoUsable(player, recipe, item, exclude)
+	if exclude[item] or item:isFavorite() or mayBePoisoned(item) then return false end
+	local okEq, equipped = pcall(function() return player:isEquipped(item) end)
+	if okEq and equipped then return false end
+	if instanceof(item, "Food") then
+		if item:isRotten() or item:isBurnt() then return false end
+		if item:isFrozen() and not recipe:isAllowFrozenItem() then return false end
+		if not recipe:needToBeCooked(item) then return false end
+		if item:isbDangerousUncooked() and not item:isCooked() and not recipe:isCookable() then return false end
+		if player:isKnownPoison(item) then return false end
+	end
+	return true
+end
+
+-- fullType -> use amount, for every ingredient the recipe takes
+local function acceptedTypes(recipe)
+	local out = {}
+	local list = recipe:getPossibleItems()
+	for i = 0, list:size() - 1 do
+		local r = list:get(i)
+		local use = r:getUse()
+		if use ~= -1 then out[r:getFullType()] = use or 0 end
+	end
+	return out
+end
+
+-- how many adds a spice item still has
+local function spiceAdds(item, use)
+	if instanceof(item, "Food") then
+		local per = (use and use > 0) and use / 100 or 0.01
+		return math.abs(item:getHungChange()) / per
+	end
+	local ok, v = pcall(function() return item:getCurrentUses() end)
+	return ok and v or 1
+end
+
+local function eachItem(player, containers, fn)
+	local seen = {}
+	local function walk(container)
+		local items = container:getItems()
+		for i = 0, items:size() - 1 do
+			local it = items:get(i)
+			if not seen[it] then seen[it] = true; fn(it) end
+		end
+	end
+	walk(player:getInventory())
+	for i = 0, containers:size() - 1 do walk(containers:get(i)) end
+end
+
+-- ingredient fullTypes, in the order they go in: first the main ingredients that go off soonest
+-- (a new type before a 2nd copy), then spices. Empty when nothing fits.
+function M.planDish(player, recipe, base, containers, exclude)
+	local cooking = player:getPerkLevel(Perks.Cooking)
+	local maxItems = recipe:getMaxItems()
+	local mains, seen = {}, {}
+	local list = recipe:getItemsCanBeUse(player, base, containers)
+	for i = 0, list:size() - 1 do
+		local item = list:get(i)
+		if item ~= base and not seen[item] and not item:isSpice() and perishable(item)
+			and M.autoUsable(player, recipe, item, exclude) then
+			seen[item] = true
+			mains[#mains + 1] = { item = item, ft = item:getFullType(), left = timeLeft(item), id = item:getID() }
+		end
+	end
+	table.sort(mains, function(a, b)
+		if a.left ~= b.left then return a.left < b.left end
+		return a.id < b.id
+	end)
+	local plan, counts, n, used = {}, {}, 0, {}
+	while maxItems <= 0 or n < maxItems do
+		local best, bestStep
+		for idx, c in ipairs(mains) do
+			if not used[idx] then
+				local step = unhappyStep(counts, n, c.ft, cooking)
+				if step <= 0 and (not best or step < bestStep) then best, bestStep = idx, step end
+			end
+		end
+		if not best then break end
+		used[best] = true
+		local ft = mains[best].ft
+		counts[ft] = (counts[ft] or 0) + 1
+		n = n + 1
+		plan[#plan + 1] = ft
+	end
+	if n == 0 then return plan end
+
+	local accepted = acceptedTypes(recipe)
+	local spices = {}
+	eachItem(player, containers, function(item)
+		local ft = item:getFullType()
+		if item ~= base and item:isSpice() and accepted[ft] and M.autoUsable(player, recipe, item, exclude) then
+			local s = spices[ft]
+			if not s then s = { ft = ft, rots = false, left = NEVER_ROTS, adds = 0 }; spices[ft] = s end
+			if perishable(item) then s.rots = true; s.left = math.min(s.left, timeLeft(item)) end
+			s.adds = s.adds + spiceAdds(item, accepted[ft])
+		end
+	end)
+	local rots, keeps = {}, {}
+	for _, s in pairs(spices) do
+		if s.rots then rots[#rots + 1] = s else keeps[#keeps + 1] = s end
+	end
+	table.sort(rots, function(a, b) if a.left ~= b.left then return a.left < b.left end return a.ft < b.ft end)
+	table.sort(keeps, function(a, b) if a.adds ~= b.adds then return a.adds > b.adds end return a.ft < b.ft end)
+	for _, s in ipairs(rots) do plan[#plan + 1] = s.ft end
+	for i = 1, math.min(SPICE_KEEP, #keeps) do plan[#plan + 1] = keeps[i].ft end
+	return plan
+end
 
 -- all distinct ingredient types missing for a fresh dish on `base`
 function M.missingFor(player, recipe, base, items, containers, exclude)
@@ -303,6 +455,13 @@ local function startDish(task)
 	local containers = containersFor(p)
 	task.recipeObj = M.findRecipe(p, base, task.recipe, containers)
 	if not task.recipeObj then return finish(task, getText("IGUI_RepeatLastDish_NoRecipe")) end
+	task.baseType, task.added = base:getFullType(), {}
+	if task.auto then
+		-- planned again for every dish: the one before used up what went off first
+		task.items = M.planDish(p, task.recipeObj, base, containers, task.exclude)
+		if #task.items == 0 then return finish(task, getText("IGUI_RepeatLastDish_AutoNone")) end
+		log("dish " .. task.dishIdx .. " plan " .. table.concat(task.items, ","))
+	end
 	local missing = M.missingFor(p, task.recipeObj, base, task.items, containers, task.exclude)
 	if #missing > 0 then return finish(task, getText("IGUI_RepeatLastDish_Missing", names(missing))) end
 	log("dish " .. task.dishIdx .. " base in " .. tostring(base:getContainer():getType()))
@@ -318,10 +477,14 @@ queueStep = function(task)
 	task.step = task.step + 1
 	local fullType = task.items[task.step]
 	if not fullType then
+		-- a dish made by "cook what spoils first" becomes the last dish (the first one, as it went in)
+		if task.auto and task.made == 0 and #task.added > 0 then
+			saveLast(p, { recipe = task.recipe, base = task.baseType, items = task.added })
+		end
 		task.made = task.made + 1
 		return startDish(task)
 	end
-	local item = M.findIngredient(p, task.recipeObj, task.base, fullType, containersFor(p), task.exclude)
+	local item = M.findIngredient(p, task.recipeObj, task.base, fullType, containersFor(p), task.exclude, task.auto)
 	if not item then
 		task.skipped[#task.skipped + 1] = fullType
 		return queueStep(task)
@@ -353,6 +516,7 @@ local function stepDone(w, dish)
 	local task = w.task
 	if M.task ~= task then return end
 	if not dish then return finish(task, getText("IGUI_RepeatLastDish_Stopped")) end
+	task.added[#task.added + 1] = w.usedType
 	task.base = dish
 	task.exclude[dish] = true
 	task.waitQueue = true
@@ -409,6 +573,22 @@ function M.start(player, bases)
 	}
 	M.task = task
 	log("start recipe=" .. last.recipe .. " bases=" .. #bases .. " items=" .. table.concat(last.items, ","))
+	local ok, err = pcall(startDish, task)
+	if not ok then log("start error", err); finish(task, getText("IGUI_RepeatLastDish_Stopped")) end
+end
+
+-- cook what spoils first: `recipeName` (untranslated) on each empty base, ingredients planned per dish
+function M.startAuto(player, bases, recipeName)
+	if #bases == 0 then return end
+	M.task = nil
+	local exclude = {}
+	for _, b in ipairs(bases) do exclude[b] = true end
+	local task = {
+		player = player, recipe = recipeName, items = {}, bases = bases, auto = true,
+		dishIdx = 0, made = 0, skipped = {}, exclude = exclude,
+	}
+	M.task = task
+	log("start auto recipe=" .. recipeName .. " bases=" .. #bases)
 	local ok, err = pcall(startDish, task)
 	if not ok then log("start error", err); finish(task, getText("IGUI_RepeatLastDish_Stopped")) end
 end
@@ -483,8 +663,50 @@ local function collectItems(items)
 	return out
 end
 
+-- the vanilla "Make Salad" submenu (vanilla leaves it out when nothing can go in right now)
+local function dishSubMenu(context, recipe)
+	local parent = context.getOptionFromName and context:getOptionFromName(getText("ContextMenu_Create_From_Ingredient", dishName(recipe)))
+	local sub = parent and parent.subOption and context.getSubMenu and context:getSubMenu(parent.subOption)
+	if sub and sub.addOptionOnTop then return sub end
+	return nil
+end
+
+-- "Cook what spoils first: Salad" in the submenu of every dish an empty selected base can become
+function M.fillAuto(player, context, items)
+	local all = collectItems(items)
+	local first = all[1]
+	if not first then return end
+	local bases, exclude = {}, {}
+	for _, it in ipairs(all) do
+		if it:getFullType() == first:getFullType() then bases[#bases + 1] = it; exclude[it] = true end
+	end
+	local containers = containersFor(player)
+	local recipes = RecipeManager.getEvolvedRecipe(first, player, containers, false)
+	if not recipes then return end
+	for i = 0, recipes:size() - 1 do
+		local recipe = recipes:get(i)
+		local sub = not recipe:isResultItem(first) and dishSubMenu(context, recipe)
+		if sub then
+			local plan = M.planDish(player, recipe, first, containers, exclude)
+			local text = getText("IGUI_RepeatLastDish_AutoOption", dishName(recipe))
+			if #bases > 1 then text = getText("IGUI_RepeatLastDish_AutoOptionCount", dishName(recipe), #bases) end
+			local option = sub:addOptionOnTop(text, player, M.startAuto, bases, recipe:getUntranslatedName())
+			local tooltip = ISInventoryPaneContextMenu.addToolTip()
+			if #plan > 0 then
+				tooltip.description = getText("IGUI_RepeatLastDish_AutoIngredients", names(plan))
+			else
+				option.notAvailable = true
+				tooltip.description = getText("IGUI_RepeatLastDish_AutoNone")
+			end
+			option.toolTip = tooltip
+		end
+	end
+end
+
 function M.onFillMenu(playerNum, context, items)
 	local player = getSpecificPlayer(playerNum)
+	local okAuto, errAuto = pcall(M.fillAuto, player, context, items)
+	if not okAuto then log("menu error", errAuto) end
 	local last = M.getLast(player)
 	if not last then return end
 	local bases = {}
@@ -500,9 +722,8 @@ function M.onFillMenu(playerNum, context, items)
 	-- first entry of the vanilla "Make Salad" submenu when there is one (vanilla leaves it out when
 	-- nothing can go in right now), else at the end of the menu
 	local option
-	local parent = context.getOptionFromName and context:getOptionFromName(getText("ContextMenu_Create_From_Ingredient", dishName(recipe)))
-	local sub = parent and parent.subOption and context.getSubMenu and context:getSubMenu(parent.subOption)
-	if sub and sub.addOptionOnTop then
+	local sub = dishSubMenu(context, recipe)
+	if sub then
 		option = sub:addOptionOnTop(text, player, M.start, bases)
 	else
 		option = context:addOption(text, player, M.start, bases)
