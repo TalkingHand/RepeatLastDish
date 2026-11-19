@@ -1,0 +1,34 @@
+Making the same salad or stir-fry again means picking every ingredient by hand once more. Repeat Last Dish remembers the ingredients of your last dish, in order, and makes it again from a right-click on an empty bowl or pan. It can also cook a dish from the food that goes off first.
+
+[b]Rotten food is never used.[/b]
+
+[h2]Repeat last dish[/h2]
+[list]
+[*][b]Recording:[/b] make a salad, stir-fry, soup and so on the usual way. The base item and every ingredient are recorded in order.
+[*][b]Repeating:[/b] right-click an empty base of the same kind and choose [b]Repeat last dish[/b] at the top of the vanilla [b]Create Salad[/b] (Stir-fry, ...) submenu. Select several bases to make several dishes in a row.
+[*][b]Ingredients:[/b] taken from your inventory first, then from the containers around you (fridge, counters, floor), oldest first. Fresh or stale does not matter.
+[*][b]Vanilla actions:[/b] the normal add-ingredient actions and times are used, and leftovers go back where they came from.
+[*][b]Missing ingredients:[/b] the option is greyed out and its tooltip lists what is missing. An ingredient that runs out partway is skipped, and you are told at the end.
+[/list]
+
+[h2]Cook what spoils first[/h2]
+Right below it: [b]Cook what spoils first[/b]. You pick the dish, and the mod picks the food that goes off soonest. The tooltip lists what will go in.
+[list]
+[*][b]Never makes the dish worse:[/b] it follows the game's own rule. A new ingredient makes the dish nicer, a 2nd of the same adds nothing and a 3rd makes it worse, so a 3rd is never added. At Cooking 0 a 5th ingredient would make the dish worse, so it stops at 4.
+[*][b]Stale food is fine:[/b] it does not make the dish less pleasant, and the dish's freshness comes from the bowl or pan. It only fills a little less.
+[*][b]Spices:[/b] all spices that go off, plus the 2 you have the most of among those that keep.
+[*][b]Never used:[/b] rotten or burnt food, favourites, items you hold, food you know is poisoned, raw meat and other food that is unsafe uncooked when the dish is never cooked, and wild mushrooms and berries (any of them may be poisoned).
+[*][b]Next time:[/b] the first dish made this way becomes your last dish, so you can repeat it.
+[/list]
+
+[h2]Compatibility[/h2]
+[list]
+[*]Lua only, runs on the client and uses the vanilla actions. No vanilla files are replaced.
+[*]In multiplayer the last dish is saved per server and character in [i]Zomboid/Lua/[/i].
+[*]Tested in single player and in multiplayer on a dedicated server (0.1.2). [b]Cook what spoils first[/b] is tested in single player only.
+[*]Safe to add to or remove from an existing save.
+[/list]
+
+Source: https://github.com/TalkingHand/RepeatLastDish
+
+[url=https://ko-fi.com/talkinghands2285][img]https://raw.githubusercontent.com/TalkingHand/RepeatLastDish/main/art/kofi_button.png[/img][/url]
